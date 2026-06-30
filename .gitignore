@@ -1,0 +1,45 @@
+# Build output
+target/
+*.class
+*.jar
+*.jar.original
+*.war
+
+# Maven
+.mvn/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+*.env.local
+
+# Claude local settings
+.claude/settings.local.json
+models.json
+results.json
+
+# Local MCP config (dev-specific endpoints)
+.mcp.json
+
+# Downloaded files / logs
+*.pdf
+*.log
+
+# Root-level .skill files (built locally — dist/ has the distributable copies)
+/*.skill
+
+# Development / evaluation (not for public release)
+_dev/
