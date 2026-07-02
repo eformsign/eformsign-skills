@@ -111,18 +111,29 @@ user: {
 ```
 
 **Case B — External user processing/signing a received document (mode "02"):**
+
+> **⚠️ Webhook → Embedding 연결**: Webhook `doc_request_participant` 이벤트의 `document.outside_token` 값을 그대로 `user.external_token`에 설정합니다. 이 값은 URL 파라미터가 아닌 반드시 EformSignDocument의 `user` 객체 안에 넣어야 합니다.
+
 ```javascript
-user: {
-  type: "02",
-  external_token: "TOKEN_FROM_WEBHOOK",  // outside_token from Webhook doc_request_participant event
-  auth_id: "TOKEN_FROM_WEBHOOK",         // ⚠️ Required: same value as external_token
+// Webhook handler (server-side, Python/Node.js):
+//   outside_token = webhook_payload["document"]["outside_token"]  ← from doc_request_participant event
+//   → pass this token to the frontend
+
+// Embedding (client-side JavaScript):
+new EformSignDocument({
+  // ... other options ...
+  user: {
+    type: "02",
+    external_token: outside_token,       // ← outside_token from Webhook, passed to EformSignDocument user object (NOT a URL param)
+    auth_id: outside_token,              // ⚠️ Required: same value as external_token
                                           // SDK's getViewer() checks _auth_id to select the correct
                                           // viewer URL (external_view_service.html). Without it,
                                           // the iframe loads /eform/account/authenticate.html instead.
-  external_user_info: {
-    name: "John Doe"
+    external_user_info: {
+      name: "John Doe"
+    }
   }
-}
+});
 ```
 
 > **Note on `auth_id`**: This field is **not documented in the official docs** but is required by the SDK internals (`efs_embedded_v2.js` → `getViewer()`). Without a truthy `auth_id`, the SDK sends the external user to the login page instead of the signing page.

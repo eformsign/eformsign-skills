@@ -104,6 +104,42 @@ Content-Type: application/json
 > - `oauth_token.access_token` — used in `Authorization: Bearer` header
 > - `oauth_token.refresh_token` — used to renew the access token
 
+> **⚠️ Do NOT hardcode the API base URL** (e.g. `"https://api.eformsign.com"`). Always use the `api_url` from the token response — it may differ per company/region.
+
+**Python example — full flow (issue token → extract api_url → call API):**
+```python
+import requests
+
+def issue_access_token(api_key_id: str, signature_hex: str, execution_time: int) -> dict:
+    url = "https://api.eformsign.com/v2.0/api_auth/access_token"
+    headers = {
+        "eformsign_signature": signature_hex,
+        "Authorization": f"Bearer {api_key_id}",
+        "Content-Type": "application/json",
+    }
+    body = {"execution_time": execution_time, "member_id": "user@example.com"}
+    resp = requests.post(url, json=body, headers=headers)
+    resp.raise_for_status()
+    data = resp.json()
+    return {
+        "api_url": data["api_key"]["company"]["api_url"],  # use this for all subsequent calls
+        "access_token": data["oauth_token"]["access_token"],
+        "refresh_token": data["oauth_token"]["refresh_token"],
+    }
+
+# After issuing the token:
+token_info = issue_access_token(API_KEY_ID, signature_hex, execution_time)
+api_url = token_info["api_url"]          # e.g. "https://kr-api.eformsign.com"
+access_token = token_info["access_token"]
+
+# Use api_url (NOT a hardcoded URL) for all subsequent API calls:
+resp = requests.post(
+    f"{api_url}/v2.0/api/list_document",
+    json={"limit": "20", "page": 1},
+    headers={"Authorization": f"Bearer {access_token}"},
+)
+```
+
 ---
 
 ## Refresh Access Token ✅ Swagger Official
@@ -130,6 +166,27 @@ Content-Type: application/json
     "expires_in": 3600
   }
 }
+```
+
+> **⚠️ Save both tokens from the response** — the server issues a new `refresh_token` on every renewal. If you only save `access_token` and discard the new `refresh_token`, the next refresh will fail.
+
+**Python example:**
+```python
+import requests
+
+def refresh_access_token(api_url: str, access_token: str, refresh_token: str) -> dict:
+    url = f"{api_url}/v2.0/api_auth/refresh_token"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    resp = requests.post(url, params={"refresh_token": refresh_token}, headers=headers)
+    resp.raise_for_status()
+    token = resp.json()["oauth_token"]
+    # Always save both — server issues a new refresh_token each time
+    access_token = token["access_token"]
+    refresh_token = token["refresh_token"]
+    return {"access_token": access_token, "refresh_token": refresh_token}
 ```
 
 ---
@@ -227,4 +284,30 @@ Required for eformsign Signature authentication (Access Token issuance) and Webh
 4. Convert the result to a **hex string** (`HexFormat.of().formatHex(bytes)` in Java — do NOT use `BigInteger` hex conversion as it may strip leading zeros)
 5. The request must arrive within **30 seconds** of signing
 
-> See `references/code_examples.md` for language-specific implementations
+> **⚠️ Do NOT use HMAC-SHA256 or any symmetric algorithm.** This is asymmetric ECDSA signing with your private key. The algorithm is SHA256withECDSA (NIST P-256 curve).
+
+### Python
+```python
+# pip install ecdsa
+import time
+import binascii
+from ecdsa import SigningKey, NIST256p
+
+def generate_eformsign_signature(private_key_hex: str) -> tuple[str, int]:
+    execution_time = int(time.time() * 1000)  # 13-digit ms timestamp — auto-generated
+    message = str(execution_time).encode('utf-8')
+    private_key_bytes = binascii.unhexlify(private_key_hex)
+    sk = SigningKey.from_string(private_key_bytes, curve=NIST256p)
+    signature_hex = binascii.hexlify(sk.sign(message)).decode('utf-8')  # SHA256withECDSA
+    return signature_hex, execution_time
+
+# Usage:
+signature, execution_time = generate_eformsign_signature(PRIVATE_KEY_HEX)
+headers = {
+    "eformsign_signature": signature,
+    "execution_time": str(execution_time),
+    "Content-Type": "application/json",
+}
+```
+
+> See `references/code_examples.md` for JavaScript/Java/PHP/C# implementations

@@ -199,6 +199,15 @@ POST {api_url}/v2.0/api/list_document      # body filter method (⚠️ singular
 
 > ⚠️ Body is required for `GET /api/documents` — server returns 400 without it despite spec saying optional.
 
+> **⚠️ `limit` is required in practice** — the spec marks it optional, but omitting `limit` from the request body causes the server to return an **empty list** even when documents exist. Always include `"limit": "20"` (string type) in the body.
+
+**Troubleshooting — symptom → cause mapping:**
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Returns **404** | Wrong path (`/list_documents` plural) | Use `/api/list_document` (singular) |
+| Returns **empty list `[]`** even though documents exist | `limit` field missing from body | Add `"limit": "20"` to request body |
+| Returns **400** | Body is missing entirely | Always include a body |
+
 > **list vs query**: The two endpoints above use a **body filter** approach. Some integrations (e.g., MCP server) expose a separate `query` action that uses **query parameters** instead of a request body. Both retrieve the same document data — the difference is only in how filters are passed.
 
 > **type `04` (manage) is admin-only**: Regular members can only use types `01`/`02`/`03`. Using type `04` without admin privileges returns an error.
@@ -321,7 +330,12 @@ GET {api_url}/v2.0/api/documents/{document_id}
 GET {api_url}/v2.0/api/documents/{document_id}/download_files
 ```
 
-> ⚠️ Spec has no status restriction, but the actual server **only works for completed (status_type=003) documents**. Returns 400 for in-progress or draft documents. `audit_trail` is only generated for completed documents.
+> ⚠️ **Completed documents only** — the spec has no status restriction, but the actual server **only works for completed (status_type=003) documents**. Calling this on in-progress, draft, or cancelled documents returns **400**. Always check document status before calling this endpoint.
+
+**Headers (required):**
+```
+Authorization: Bearer {access_token}
+```
 
 **Query Parameters:**
 | Parameter | Type | Required | Description |
@@ -330,6 +344,18 @@ GET {api_url}/v2.0/api/documents/{document_id}/download_files
 | file_name | string | N | Output file name |
 
 **Response:** `application/pdf` or `application/zip` binary stream
+
+**Python example:**
+```python
+import requests
+
+def download_document_pdf(api_url: str, access_token: str, document_id: str) -> bytes:
+    url = f"{api_url}/v2.0/api/documents/{document_id}/download_files"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    resp = requests.get(url, params={"file_type": "document"}, headers=headers)
+    resp.raise_for_status()
+    return resp.content  # PDF binary
+```
 
 ---
 
